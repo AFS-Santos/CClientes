@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Conversor Carteira — DENSUL</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:             #0f1117;
+    --surface:        #181c27;
+    --surface2:       #1e2333;
+    --border:         #2a3050;
+    --accent:         #e63946;
+    --accent-hover:   #c1121f;
+    --accent2:        #457b9d;
+    --green:          #2d9b5a;
+    --yellow:         #f4a261;
+    --text:           #e8eaf0;
+    --muted:          #7a85a3;
+    --header-cliente: #1a2744;
+    --header-cols:    #8b1a1a;
+    --tot1-bg:        #0d2137;
+    --tot1-fg:        #7ec8e3;
+    --tot2-bg:        #0d2a16;
+    --tot2-fg:        #6bcf8c;
+    --tot3-bg:        #2a1f00;
+    --tot3-fg:        #f4d060;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'IBM Plex Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── HEADER ── */
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 18px 40px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .logo {
+    width: 38px; height: 38px;
+    background: var(--accent);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'IBM Plex Mono', monospace;
+    font-weight: 600; font-size: 14px; color: #fff;
+    flex-shrink: 0;
+  }
+  header h1 { font-size: 15px; font-weight: 600; letter-spacing: .03em; }
+  header span { font-size: 11px; color: var(--muted); font-family: 'IBM Plex Mono', monospace; }
+
+  /* ── MAIN ── */
+  main {
+    flex: 1;
+    padding: 40px;
+    max-width: 1100px;
+    width: 100%;
+    margin: 0 auto;
+  }
+
+  /* ── DROP ZONE ── */
+  .drop-zone {
+    border: 2px dashed var(--border);
+    border-radius: 12px;
+    padding: 60px 40px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color .2s, background .2s;
+    background: var(--surface);
+    position: relative;
+  }
+  .drop-zone:hover,
+  .drop-zone.drag-over { border-color: var(--accent); background: #1a1c24; }
+  .drop-zone input[type=file] {
+    position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+  }
+  .drop-icon { font-size: 44px; margin-bottom: 14px; display: block; opacity: .55; }
+  .drop-zone h2 { font-size: 17px; font-weight: 600; margin-bottom: 8px; }
+  .drop-zone p  { font-size: 13px; color: var(--muted); }
+  .badge {
+    display: inline-block; margin-top: 14px;
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 20px; padding: 4px 14px;
+    font-size: 11px; font-family: 'IBM Plex Mono', monospace; color: var(--muted);
+  }
+
+  /* ── STATUS ── */
+  #status {
+    margin-top: 18px;
+    padding: 12px 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-family: 'IBM Plex Mono', monospace;
+    display: none;
+    border-left: 3px solid;
+  }
+  #status.info    { background: #0d1a2e; border-color: var(--accent2); color: #7ec8e3; display: block; }
+  #status.success { background: #0d2a16; border-color: var(--green);   color: #6bcf8c; display: block; }
+  #status.error   { background: #2a0d0d; border-color: var(--accent);  color: #f28b82; display: block; }
+
+  /* ── STATS ── */
+  #stats { display: none; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 24px; }
+  #stats.visible { display: grid; }
+  .stat-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 20px;
+  }
+  .stat-card .label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 6px; }
+  .stat-card .value { font-size: 28px; font-weight: 700; font-family: 'IBM Plex Mono', monospace; }
+  .stat-card.c1 .value { color: var(--accent2); }
+  .stat-card.c2 .value { color: var(--yellow); }
+  .stat-card.c3 .value { color: var(--green); font-size: 20px; }
+
+  /* ── PREVIEW ── */
+  #preview-section { display: none; margin-top: 32px; }
+  #preview-section.visible { display: block; }
+  #preview-section h3 {
+    font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .1em;
+    color: var(--muted); margin-bottom: 14px; padding-bottom: 10px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  #preview-section h3 span { font-size: 11px; font-weight: 400; letter-spacing: 0; font-family: 'IBM Plex Mono', monospace; }
+
+  .preview-scroll {
+    overflow: auto;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    max-height: 520px;
+  }
+  .preview-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+  .preview-scroll::-webkit-scrollbar-track { background: var(--surface); }
+  .preview-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  table { border-collapse: collapse; width: 100%; font-size: 12px; }
+
+  .row-cliente td {
+    background: var(--header-cliente); color: #fff; font-weight: 600;
+    padding: 10px 14px; font-size: 12px; border-bottom: 1px solid var(--border);
+  }
+  .row-header th {
+    background: var(--header-cols); color: #fff; font-weight: 600;
+    padding: 8px 12px; text-align: center; font-size: 11px;
+    text-transform: uppercase; letter-spacing: .05em; white-space: nowrap;
+    position: sticky; top: 0; z-index: 2; border-bottom: 2px solid #5a0f0f;
+  }
+  .row-data td {
+    padding: 7px 12px; border-bottom: 1px solid var(--border);
+    color: var(--text); white-space: nowrap;
+  }
+  .row-data:nth-child(odd)  td { background: var(--surface2); }
+  .row-data:nth-child(even) td { background: var(--surface); }
+  .row-data td.num { text-align: right; font-family: 'IBM Plex Mono', monospace; }
+  .row-data td.ctr { text-align: center; }
+
+  .row-tot1 td, .row-tot2 td, .row-tot3 td {
+    padding: 8px 12px; font-weight: 700;
+    font-family: 'IBM Plex Mono', monospace; font-size: 12px;
+  }
+  .row-tot1 td { background: var(--tot1-bg); color: var(--tot1-fg); border-top: 1px solid #1a3a55; }
+  .row-tot2 td { background: var(--tot2-bg); color: var(--tot2-fg); }
+  .row-tot3 td { background: var(--tot3-bg); color: var(--tot3-fg); border-bottom: 2px solid #3a2a00; }
+  .row-spacer td { height: 10px; background: var(--bg); border: none; }
+
+  /* ── BOTÃO ── */
+  #btn-download {
+    display: none; margin-top: 28px;
+    background: var(--accent); color: #fff; border: none;
+    border-radius: 8px; padding: 14px 32px;
+    font-size: 14px; font-weight: 700; font-family: 'IBM Plex Sans', sans-serif;
+    cursor: pointer; letter-spacing: .03em; transition: all .15s; width: 100%;
+  }
+  #btn-download:hover { background: var(--accent-hover); transform: translateY(-1px); }
+  #btn-download.visible { display: block; }
+  #btn-download span { font-family: 'IBM Plex Mono', monospace; font-weight: 400; font-size: 12px; opacity: .8; margin-left: 8px; }
+
+  .footer-note {
+    margin-top: 12px; font-size: 11px; color: var(--muted);
+    text-align: center; font-family: 'IBM Plex Mono', monospace;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">DS</div>
+  <div>
+    <h1>Conversor — Carteira de Clientes</h1>
+    <span>DENSUL ERP · CSV → XLSX formatado</span>
+  </div>
+</header>
+
+<main>
+  <div class="drop-zone" id="dropZone">
+    <input type="file" id="fileInput" accept=".csv" multiple>
+    <span class="drop-icon">📂</span>
+    <h2>Arraste um ou mais CSVs aqui ou clique para selecionar</h2>
+    <p>Arquivo(s) exportado(s) do ERP — os dados serão agregados em um único Excel</p>
+    <div class="badge">carteira_*.csv · BANCOS_*.csv</div>
+  </div>
+
+  <div id="status"></div>
+
+  <div id="stats">
+    <div class="stat-card c1">
+      <div class="label">Clientes</div>
+      <div class="value" id="stat-clientes">—</div>
+    </div>
+    <div class="stat-card c2">
+      <div class="label">Títulos</div>
+      <div class="value" id="stat-titulos">—</div>
+    </div>
+    <div class="stat-card c3">
+      <div class="label">Saldo Total</div>
+      <div class="value" id="stat-saldo">—</div>
+    </div>
+  </div>
+
+  <div id="preview-section">
+    <h3>Pré-visualização <span id="preview-info"></span></h3>
+    <div class="preview-scroll">
+      <div id="preview-table-wrapper"></div>
+    </div>
+  </div>
+
+  <button id="btn-download">
+    ⬇ Baixar Excel <span id="btn-filename"></span>
+  </button>
+  <p class="footer-note" id="footer-note" style="display:none">
+    Processado no navegador — nenhum dado é enviado para servidores
+  </p>
+</main>
+
+<script type="module" src="/src/main.ts"></script>
+</body>
+</html>
