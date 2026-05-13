@@ -1,5 +1,5 @@
 // src/main.ts
-import type { Cliente } from './types'
+import type { Cliente, TotalFinal } from './types'
 import { parsearVarios }   from './parsers'
 import { validarClientes } from './validators/schemas'
 import { gerarExcel }      from './converters/excel.converter'
@@ -8,6 +8,7 @@ import { atualizarStats }  from './ui/stats'
 
 // ── Estado ──────────────────────────────────────────────────────────────────
 let dadosProcessados: Cliente[] = []
+let totalFinalGlobal: TotalFinal | null = null
 let nomeArquivo = 'carteira_consolidado'
 
 // ── Helpers de UI ────────────────────────────────────────────────────────────
@@ -50,7 +51,7 @@ async function processarArquivos(files: FileList): Promise<void> {
       fileArr.map(f => f.arrayBuffer())
     )
 
-    const { clientes, erros } = parsearVarios(buffers)
+    const { clientes, erros, totalFinal } = parsearVarios(buffers)
     const { validos, erros: errosZod } = validarClientes(clientes)
 
     const todosErros = [...erros, ...errosZod]
@@ -59,6 +60,7 @@ async function processarArquivos(files: FileList): Promise<void> {
     }
 
     dadosProcessados = validos as Cliente[]
+    totalFinalGlobal = totalFinal
 
     // Atualizar UI
     atualizarStats(dadosProcessados)
@@ -116,7 +118,7 @@ btnDown?.addEventListener('click', async () => {
   if (!dadosProcessados.length) return
   setStatus('⏳ Gerando Excel formatado...', 'info')
   try {
-    await gerarExcel(dadosProcessados, nomeArquivo)
+    await gerarExcel(dadosProcessados, nomeArquivo, totalFinalGlobal)
     setStatus('✓ Excel gerado e download iniciado!', 'success')
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)

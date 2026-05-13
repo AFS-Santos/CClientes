@@ -1,7 +1,7 @@
 // src/parsers/carteira.parser.ts
 // Formato: carteira_8.csv — sem linha Empresa, cliente em col[0]
 
-import type { Cliente, Titulo, ParseResult } from '../types'
+import type { Cliente, Titulo, ParseResult, TotalFinal } from '../types'
 import { IS_DATE, IS_MONEY } from '../utils/date'
 
 type Row = string[]
@@ -55,11 +55,32 @@ function getLastMoney(row: Row): string {
 export function parseCarteira(rows: Row[]): ParseResult {
   const clientes: Cliente[] = []
   let current: Cliente | null = null
+  let totalFinal: TotalFinal | null = null
+  let capturandoTotal = false
+  let totalTemp: Partial<TotalFinal> = {}
 
   for (const row of rows) {
     const col0 = v(row, 0)
 
-    if (col0.startsWith('Total Geral')) break
+    // Capturar Total Geral
+    if (col0.startsWith('Total Geral')) {
+      capturandoTotal = true
+      totalTemp = { label: 'Total Geral', totalTitulos: getLastMoney(row) }
+      continue
+    }
+    if (capturandoTotal) {
+      const rowStr = row.join('|')
+      if (rowStr.toLowerCase().includes('sem juros')) {
+        totalTemp.saldoSemJuros = getLastMoney(row)
+        continue
+      }
+      if (rowStr.includes('Saldo a Receber.....')) {
+        totalTemp.saldoComJuros = getLastMoney(row)
+        totalFinal = totalTemp as TotalFinal
+        capturandoTotal = false
+        continue
+      }
+    }
 
     if (col0 === 'Cliente:') {
       const c5 = v(row, 5)
@@ -102,7 +123,8 @@ export function parseCarteira(rows: Row[]): ParseResult {
   }
 
   return {
-    clientes: clientes.filter(c => c.titulos.length > 0),
-    erros: [],
+    clientes:   clientes.filter(c => c.titulos.length > 0),
+    erros:      [],
+    totalFinal,
   }
 }

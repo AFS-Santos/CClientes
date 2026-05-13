@@ -1,7 +1,7 @@
 // src/parsers/bancos.parser.ts
 // Formato: BANCOS_*.csv — com linha Empresa, cliente em col[1] ou col[2]
 
-import type { Cliente, Titulo, ParseResult } from '../types'
+import type { Cliente, Titulo, ParseResult, TotalFinal } from '../types'
 import { IS_DATE, IS_MONEY, IS_INT_S, IS_COD } from '../utils/date'
 
 type Row = string[]
@@ -62,17 +62,37 @@ export function parseBancos(rows: Row[]): ParseResult {
   let current: Cliente | null = null
   let empresaAtual = ''
   let colMap: Record<string, number> = {}
+  let totalFinal: TotalFinal | null = null
+  let capturandoTotal = false
+  let totalTemp: Partial<TotalFinal> = {}
 
   for (const row of rows) {
     const col0 = v(row, 0)
     const col1 = v(row, 1)
     const col2 = v(row, 2)
 
+    // Capturar Total Final (última linha de totais)
+    if (col0.startsWith('Total Final')) {
+      capturandoTotal = true
+      totalTemp = { label: 'Total Final', totalTitulos: getLastMoney(row) }
+      continue
+    }
+    if (capturandoTotal) {
+      const rowStr = row.join('|')
+      if (rowStr.toLowerCase().includes('sem juros')) {
+        totalTemp.saldoSemJuros = getLastMoney(row); continue
+      }
+      if (rowStr.toLowerCase().includes('saldo a receber')) {
+        totalTemp.saldoComJuros = getLastMoney(row)
+        totalFinal = totalTemp as TotalFinal
+        capturandoTotal = false; continue
+      }
+    }
+
     if (
       col0.startsWith('Total Empresa') ||
-      col0.startsWith('Total Final') ||
       col0.startsWith('Total Geral')
-    ) break
+    ) continue  // pular, não break — Total Final vem depois
 
     // Linha de Empresa
     if (col0 === 'Empresa:') {
@@ -141,7 +161,8 @@ export function parseBancos(rows: Row[]): ParseResult {
   }
 
   return {
-    clientes: clientes.filter(c => c.titulos.length > 0),
-    erros: [],
+    clientes:   clientes.filter(c => c.titulos.length > 0),
+    erros:      [],
+    totalFinal,
   }
 }

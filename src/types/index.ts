@@ -22,7 +22,15 @@ export interface Cliente {
   saldoComJuros: string
 }
 
+export interface TotalFinal {
+  totalTitulos:  string
+  saldoSemJuros: string
+  saldoComJuros: string
+  label: string   // ex: "Total Geral" ou "Total Final"
+}
+
 export type ParseResult = {
-  clientes: Cliente[]
-  erros: string[]
+  clientes:   Cliente[]
+  erros:      string[]
+  totalFinal: TotalFinal | null
 }

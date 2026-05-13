@@ -1,7 +1,7 @@
 // src/converters/excel.converter.ts
 
 import ExcelJS from 'exceljs'
-import type { Cliente } from '../types'
+import type { Cliente, TotalFinal } from '../types'
 import { parseMoney } from '../utils/money'
 import { parseDate }  from '../utils/date'
 
@@ -168,7 +168,62 @@ function escreverClientes(ws: ExcelJS.Worksheet, clientes: Cliente[]): void {
   }
 }
 
-export async function gerarExcel(clientes: Cliente[], nomeArquivo: string): Promise<void> {
+function escreverTotalFinal(ws: ExcelJS.Worksheet, total: TotalFinal): void {
+  // Linha de separação mais grossa antes do total
+  const rSep = ws.addRow(['', '', '', '', '', '', '', ''])
+  rSep.height = 6
+  for (let c = 1; c <= 8; c++) {
+    const cell = rSep.getCell(c)
+    cell.fill   = cor('1F3864')
+    cell.border = { top: MED, bottom: MED }
+  }
+
+  // Título do bloco
+  const rTit = ws.addRow([`  ${total.label}`, '', '', '', '', '', '', ''])
+  ws.mergeCells(`A${rTit.number}:H${rTit.number}`)
+  rTit.height = 22
+  const cTit = rTit.getCell(1)
+  cTit.fill      = cor('1F3864')
+  cTit.font      = fnt({ bold: true, size: 11, color: 'FFFFFF' })
+  cTit.alignment = aln('left')
+
+  // 3 linhas de total
+  const tots: [string, string, Cor, Cor][] = [
+    ['Total Títulos (Valor Original):',   total.totalTitulos,  'DDEEFF', '1A3A5C'],
+    ['Saldo a Receber sem Juros/Multa:',  total.saldoSemJuros, 'DDEFDD', '1A4C2E'],
+    ['Saldo a Receber (c/ Juros/Multa):', total.saldoComJuros, 'FFF3D0', '7F5500'],
+  ]
+
+  for (let ti = 0; ti < tots.length; ti++) {
+    const [label, valorStr, bgHex, fgHex] = tots[ti]
+    const last  = ti === tots.length - 1
+    const valor = parseMoney(valorStr)
+
+    const rTot = ws.addRow([label, valor, '', '', '', '', '', ''])
+    rTot.height = 18
+
+    const cLbl = rTot.getCell(1)
+    cLbl.fill      = cor(bgHex)
+    cLbl.font      = fnt({ bold: true, size: 10, color: fgHex })
+    cLbl.alignment = aln('right')
+    cLbl.border    = brdT(last)
+
+    const cVal = rTot.getCell(2)
+    cVal.fill      = cor(bgHex)
+    cVal.font      = fnt({ bold: true, size: 11, color: fgHex })
+    cVal.numFmt    = FMT_MOEDA
+    cVal.alignment = aln('right')
+    cVal.border    = brdT(last)
+
+    for (let c = 3; c <= 8; c++) {
+      const cell  = rTot.getCell(c)
+      cell.fill   = cor(bgHex)
+      cell.border = brdT(last)
+    }
+  }
+}
+
+export async function gerarExcel(clientes: Cliente[], nomeArquivo: string, totalFinal?: TotalFinal | null): Promise<void> {
   const wb = new ExcelJS.Workbook()
   wb.creator = 'DENSUL Conversor'
 
@@ -187,6 +242,11 @@ export async function gerarExcel(clientes: Cliente[], nomeArquivo: string): Prom
   c1.fill = cor('1F3864'); c1.font = fnt({ bold: true, size: 13, color: 'FFFFFF' }); c1.alignment = aln('center')
 
   escreverClientes(ws, clientes)
+
+  // Total Final no fim da planilha
+  if (totalFinal) {
+    escreverTotalFinal(ws, totalFinal)
+  }
 
   // Download
   const buf  = await wb.xlsx.writeBuffer()
