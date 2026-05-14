@@ -1,15 +1,15 @@
 // src/utils/csv/helpers.ts
-// Helpers compartilhados para leitura de linhas do CSV do ERP
+import { sanitizeCell } from './sanitize'
 
 export const IS_DATE  = /^\d{2}\/\d{2}\/\d{4}$/
 export const IS_MONEY = /^-?[\d.]+,\d{2}$/
-export const IS_INT_S = /^\d{1,4}$/      // nº carteira
-export const IS_COD   = /^\d{4,6}$/      // código cliente
+export const IS_INT_S = /^\d{1,4}$/
+export const IS_COD   = /^\d{4,6}$/
 
-/** Lê célula da linha, retorna '' para null/nan/undefined */
+/** Lê célula da linha, sanitiza e retorna '' para null/nan */
 export function cell(row: string[], idx: number): string {
   if (idx < 0 || idx >= row.length) return ''
-  const val = (row[idx] ?? '').trim()
+  const val = sanitizeCell(row[idx] ?? '')
   return val === 'nan' ? '' : val
 }
 
@@ -17,31 +17,23 @@ export function cell(row: string[], idx: number): string {
 export function lastMoney(row: string[]): string {
   let last = ''
   for (const val of row) {
-    const t = val.trim()
+    const t = sanitizeCell(val)
     if (IS_MONEY.test(t)) last = t
   }
   return last
 }
 
-// ── findNear com confidence ──────────────────────────────────────────────────
-
 export type MatchTipo = 'date' | 'money' | 'int'
 
 export type Match = {
   value:      string
-  confidence: number   // 0–1: 1 = mesmo índice do header, menor = mais longe
-  offset:     number   // quantas colunas afastou do hdrCol
+  confidence: number
+  offset:     number
 }
 
 const NULL_MATCH: Match = { value: '', confidence: 0, offset: 0 }
+const SEARCH_RANGE = [-2, -1, 0, 1, 2, 3, 4, 5]
 
-const SEARCH_RANGE = [-2, -1, 0, 1, 2, 3, 4, 5] // offsets em ordem de preferência
-
-/**
- * Busca o valor mais próximo de hdrCol do tipo esperado.
- * Retorna Match com confidence baseado na distância do offset.
- * confidence = 1.0 - (|offset| / 10) — penaliza offsets maiores.
- */
 export function findNear(
   row: string[],
   hdrCol: number,
@@ -59,7 +51,7 @@ export function findNear(
     if (ok) {
       const confidence = Math.max(0.1, 1.0 - Math.abs(off) / 10)
       if (Math.abs(off) >= 3 && warnFn) {
-        warnFn(`findNear: offset alto (${off > 0 ? '+' : ''}${off}) para tipo=${tipo} hdrCol=${hdrCol} → val="${val}" confidence=${confidence.toFixed(2)}`)
+        warnFn(`findNear: offset alto (${off > 0 ? '+' : ''}${off}) tipo=${tipo} hdrCol=${hdrCol} val="${val}" conf=${confidence.toFixed(2)}`)
       }
       return { value: val, confidence, offset: off }
     }
@@ -67,7 +59,6 @@ export function findNear(
   return NULL_MATCH
 }
 
-/** Versão simplificada — retorna só o valor (compatibilidade) */
 export function findNearValue(
   row: string[],
   hdrCol: number,

@@ -1,23 +1,24 @@
 // src/utils/csv/sanitize.ts
-// Etapa 1 do pipeline: estabilizar o buffer antes do parse
 
 /**
- * Sanitiza o CSV bruto antes de passar para o PapaParse.
- * Remove null bytes, normaliza quebras de linha, corta espaços extras.
+ * Sanitiza uma CÉLULA individual após o PapaParse já ter feito o split.
+ * Remove caracteres de controle residuais, normaliza espaços.
  */
-export function sanitizeCsv(raw: string): string {
-  return raw
-    .replace(/\u0000/g, '')          // null bytes (separador \x00 do ERP)
-    .replace(/\r\n/g, '\n')          // normalizar CRLF → LF
-    .replace(/\r/g, '\n')            // CR solto → LF
-    .replace(/[^\x09\x0A\x20-\xFF]/g, '') // remover outros chars de controle (exceto tab/newline)
+export function sanitizeCell(val: string): string {
+  return val
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '') // controles exceto \t \n
     .trim()
 }
 
 /**
- * Decodifica ArrayBuffer como Windows-1252 e sanitiza.
+ * Decodifica ArrayBuffer como Windows-1252.
+ * NÃO remove os null bytes aqui — o PapaParse precisa deles como delimiter.
+ * Apenas normaliza quebras de linha.
  */
 export function decodificarBuffer(buffer: ArrayBuffer): string {
   const decoder = new TextDecoder('windows-1252')
-  return sanitizeCsv(decoder.decode(buffer))
+  const text    = decoder.decode(buffer)
+  return text
+    .replace(/\r\n/g, '\n')  // normalizar CRLF → LF
+    .replace(/\r/g, '\n')     // CR solto → LF
 }
