@@ -1,4 +1,6 @@
 // src/utils/date.ts
+// Re-exporta as regex de utils/csv/helpers para compatibilidade com imports existentes
+export { IS_DATE, IS_MONEY, IS_INT_S, IS_COD } from './csv/helpers'
 
 /** Converte "DD/MM/YYYY" para objeto Date */
 export function parseDate(s: string): Date | null {
@@ -7,8 +9,3 @@ export function parseDate(s: string): Date | null {
   if (!m) return null
   return new Date(+m[3], +m[2] - 1, +m[1])
 }
-
-export const IS_DATE  = /^\d{2}\/\d{2}\/\d{4}$/
-export const IS_MONEY = /^-?[\d.]+,\d{2}$/
-export const IS_INT_S = /^\d{1,4}$/     // nº carteira
-export const IS_COD   = /^\d{4,6}$/     // código cliente

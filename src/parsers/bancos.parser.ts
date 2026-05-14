@@ -1,36 +1,15 @@
 // src/parsers/bancos.parser.ts
-// Formato: BANCOS_*.csv — com linha Empresa, cliente em col[1] ou col[2]
+// Pipeline: sanitize → parse → normalize headers → infer columns → transform → validate
+// Formato: BANCOS_*.csv — com linha Empresa:, cliente em col[1] ou col[2]
 
-import type { Cliente, Titulo, ParseResult, TotalFinal } from '../types'
-import { IS_DATE, IS_MONEY, IS_INT_S, IS_COD } from '../utils/date'
+import type { Cliente, ParseResult } from '../types'
+import { cell, lastMoney, findNearValue, IS_MONEY, IS_COD } from '../utils/csv'
+import { buildColMap } from '../utils/csv'
 
 type Row = string[]
 
-function v(row: Row, idx: number): string {
-  if (idx < 0 || idx >= row.length) return ''
-  const val = (row[idx] ?? '').trim()
-  return val === 'nan' ? '' : val
-}
-
-/** Busca o valor mais próximo de hdrCol do tipo esperado */
-function findNear(row: Row, hdrCol: number, tipo: 'date' | 'money' | 'int'): string {
-  for (let off = -3; off <= 5; off++) {
-    const c = hdrCol + off
-    const val = v(row, c)
-    if (tipo === 'date'  && IS_DATE.test(val))  return val
-    if (tipo === 'money' && IS_MONEY.test(val)) return val
-    if (tipo === 'int'   && IS_INT_S.test(val)) return val
-  }
-  return ''
-}
-
-function getLastMoney(row: Row): string {
-  let last = ''
-  for (const val of row) {
-    const t = val.trim()
-    if (IS_MONEY.test(t)) last = t
-  }
-  return last
+function warn(avisos: string[], msg: string) {
+  avisos.push(`[bancos.parser] ${msg}`)
 }
 
 function extrairClienteInfo(row: Row): { codigo: string; nome: string; cpfcnpj: string } {
@@ -39,9 +18,7 @@ function extrairClienteInfo(row: Row): { codigo: string; nome: string; cpfcnpj: 
 
   row.forEach((val, i) => {
     const t = val.trim()
-    if (t && !['', 'nan', 'Cliente:', 'CNPJ:', 'CPF:'].includes(t)) {
-      allVals[i] = t
-    }
+    if (t && !['', 'nan', 'Cliente:', 'CNPJ:', 'CPF:'].includes(t)) allVals[i] = t
     if (t === 'CNPJ:' || t === 'CPF:') cnpjIdx = i
   })
 
@@ -49,84 +26,77 @@ function extrairClienteInfo(row: Row): { codigo: string; nome: string; cpfcnpj: 
 
   for (const c of Object.keys(allVals).map(Number).sort((a, b) => a - b)) {
     const val = allVals[c]
-    if (IS_COD.test(val) && !codigo) { codigo = val; continue }
-    if (val.length > 5 && !IS_MONEY.test(val) && !IS_COD.test(val) && !nome) { nome = val; continue }
-    if (cnpjIdx !== null && c === (cnpjIdx as number) + 2) cpfcnpj = val
+    if (IS_COD.test(val) && !codigo)                                          { codigo = val; continue }
+    if (val.length > 5 && !IS_MONEY.test(val) && !IS_COD.test(val) && !nome) { nome   = val; continue }
+    if (cnpjIdx !== null && c === (cnpjIdx as number) + 2)                   cpfcnpj = val
   }
 
   return { codigo, nome, cpfcnpj }
 }
 
 export function parseBancos(rows: Row[]): ParseResult {
-  const clientes: Cliente[] = []
-  let current: Cliente | null = null
+  const clientes: Cliente[]            = []
+  const erros:    string[]             = []
+  const avisos:   string[]             = []
+  let current:    Cliente | null       = null
+  let totalFinal: ParseResult['totalFinal'] = null
+  let capturandoFinal                  = false
+  let totalTemp:  Partial<NonNullable<ParseResult['totalFinal']>> = {}
+  let colMap:     Record<string, number> = {}
   let empresaAtual = ''
-  let colMap: Record<string, number> = {}
-  let totalFinal: TotalFinal | null = null
-  let capturandoTotal = false
-  let totalTemp: Partial<TotalFinal> = {}
 
   for (const row of rows) {
-    const col0 = v(row, 0)
-    const col1 = v(row, 1)
-    const col2 = v(row, 2)
+    const col0 = cell(row, 0)
+    const col1 = cell(row, 1)
+    const col2 = cell(row, 2)
 
-    // Capturar Total Final (última linha de totais)
+    // ── Total Empresa → fechar cliente (evita vazamento dos totais globais) ──
+    if (col0.startsWith('Total Empresa') || col0.startsWith('Total Geral')) {
+      current = null; continue
+    }
+
+    // ── Capturar Total Final ──
     if (col0.startsWith('Total Final')) {
-      capturandoTotal = true
-      totalTemp = { label: 'Total Final', totalTitulos: getLastMoney(row) }
+      current = null
+      capturandoFinal = true
+      totalTemp = { label: 'Total Final', totalTitulos: lastMoney(row) }
       continue
     }
-    if (capturandoTotal) {
-      const rowStr = row.join('|')
-      if (rowStr.toLowerCase().includes('sem juros')) {
-        totalTemp.saldoSemJuros = getLastMoney(row); continue
+    if (capturandoFinal) {
+      const rs = row.join('|')
+      if (rs.toLowerCase().includes('sem juros')) {
+        totalTemp.saldoSemJuros = lastMoney(row); continue
       }
-      if (rowStr.toLowerCase().includes('saldo a receber')) {
-        totalTemp.saldoComJuros = getLastMoney(row)
-        totalFinal = totalTemp as TotalFinal
-        capturandoTotal = false; continue
+      if (rs.toLowerCase().includes('saldo a receber') && !rs.toLowerCase().includes('sem juros')) {
+        totalTemp.saldoComJuros = lastMoney(row)
+        totalFinal = totalTemp as NonNullable<ParseResult['totalFinal']>
+        capturandoFinal = false; continue
       }
     }
 
-    if (
-      col0.startsWith('Total Empresa') ||
-      col0.startsWith('Total Geral')
-    ) continue  // pular, não break — Total Final vem depois
-
-    // Linha de Empresa
+    // ── Linha de Empresa ──
     if (col0 === 'Empresa:') {
       const nonEmpty = row
-        .map((val, i) => ({ i, val: val.trim() }))
-        .filter(x => x.val && x.val !== 'Empresa:' && x.val !== 'nan')
+        .map((v, i) => ({ i, v: v.trim() }))
+        .filter(x => x.v && x.v !== 'Empresa:' && x.v !== 'nan')
         .sort((a, b) => a.i - b.i)
-      empresaAtual = nonEmpty.length > 1 ? nonEmpty[1].val : ''
+      empresaAtual = nonEmpty.length > 1 ? nonEmpty[1].v : ''
       continue
     }
 
-    // Cabeçalho de colunas — mapear posições
+    // ── Normalize headers → buildColMap ──
     if (col0 === 'Título') {
-      colMap = {}
-      row.forEach((val, i) => {
-        const t = val.trim()
-        if (t && t !== 'nan') colMap[t] = i
-      })
+      colMap = buildColMap(row)
       continue
     }
 
-    // Linha de cliente (col1 ou col2 == 'Cliente:')
+    // ── Linha de cliente ──
     if (col1 === 'Cliente:' || col2 === 'Cliente:') {
       const { codigo, nome, cpfcnpj } = extrairClienteInfo(row)
       current = {
-        empresa:       empresaAtual,
-        codigo,
-        nome,
-        cpfcnpj,
-        titulos:       [],
-        totalTitulos:  '',
-        saldoSemJuros: '',
-        saldoComJuros: '',
-      }
+        empresa: empresaAtual, codigo, nome, cpfcnpj,
+        titulos: [], totalTitulos: '', saldoSemJuros: '', saldoComJuros: '', anotacao: '',
+      } as unknown as Cliente
       clientes.push(current)
       continue
     }
@@ -135,34 +105,38 @@ export function parseBancos(rows: Row[]): ParseResult {
 
     const rowStr = row.join('|')
 
+    // ── Totalizadores por cliente ──
     if (col0.toLowerCase() === 'total cliente:') {
-      current.totalTitulos = getLastMoney(row); continue
+      current.totalTitulos = lastMoney(row); continue
     }
     if (rowStr.toLowerCase().includes('sem juros')) {
-      current.saldoSemJuros = getLastMoney(row); continue
+      current.saldoSemJuros = lastMoney(row); continue
     }
     if (rowStr.includes('Saldo a Receber.....')) {
-      current.saldoComJuros = getLastMoney(row); continue
+      current.saldoComJuros = lastMoney(row); continue
     }
 
+    // ── Linha de título ──
     if (!/^\d+$/.test(col0)) continue
 
-    const titulo: Titulo = {
+    const warnFn = (m: string) => warn(avisos, m)
+
+    current.titulos.push({
       titulo:     col0,
-      emissao:    findNear(row, colMap['Emissão']     ?? 99, 'date'),
-      vencimento: findNear(row, colMap['Vencimento']  ?? 99, 'date'),
-      valor:      findNear(row, colMap['Valor']        ?? 99, 'money'),
-      saldoBruto: findNear(row, colMap['Saldo Bruto']  ?? 99, 'money'),
-      saldo:      findNear(row, colMap['Saldo']         ?? 99, 'money'),
-      nrCarteira: findNear(row, colMap['Carteira']      ?? 99, 'int'),
+      emissao:    findNearValue(row, colMap['emissao']     ?? 99, 'date',  warnFn),
+      vencimento: findNearValue(row, colMap['vencimento']  ?? 99, 'date',  warnFn),
+      valor:      findNearValue(row, colMap['valor']        ?? 99, 'money', warnFn),
+      saldoBruto: findNearValue(row, colMap['saldo_bruto']  ?? 99, 'money', warnFn),
+      saldo:      findNearValue(row, colMap['saldo']         ?? 99, 'money', warnFn),
+      nrCarteira: findNearValue(row, colMap['carteira']      ?? 99, 'int',   warnFn),
       anotacao:   '',
-    }
-    current.titulos.push(titulo)
+    } as Cliente['titulos'][number])
   }
 
   return {
-    clientes:   clientes.filter(c => c.titulos.length > 0),
-    erros:      [],
+    clientes: clientes.filter(c => c.titulos.length > 0),
+    erros,
+    avisos,
     totalFinal,
   }
 }
