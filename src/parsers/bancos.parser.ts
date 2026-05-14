@@ -93,6 +93,7 @@ export function parseBancos(rows: Row[]): ParseResult {
     // ── Linha de cliente ──
     if (col1 === 'Cliente:' || col2 === 'Cliente:') {
       const { codigo, nome, cpfcnpj } = extrairClienteInfo(row)
+      if (!nome) continue  // ignorar linha Cliente: sem nome (subtotal/cabeçalho do ERP)
       current = {
         empresa: empresaAtual, codigo, nome, cpfcnpj,
         titulos: [], totalTitulos: '', saldoSemJuros: '', saldoComJuros: '', anotacao: '',

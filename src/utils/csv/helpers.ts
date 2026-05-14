@@ -34,6 +34,9 @@ export type Match = {
 const NULL_MATCH: Match = { value: '', confidence: 0, offset: 0 }
 const SEARCH_RANGE = [-2, -1, 0, 1, 2, 3, 4, 5]
 
+// Cache de avisos já emitidos — evita poluição do console com repetições
+const _warnCache = new Set<string>()
+
 export function findNear(
   row: string[],
   hdrCol: number,
@@ -50,8 +53,13 @@ export function findNear(
 
     if (ok) {
       const confidence = Math.max(0.1, 1.0 - Math.abs(off) / 10)
-      if (Math.abs(off) >= 3 && warnFn) {
-        warnFn(`findNear: offset alto (${off > 0 ? '+' : ''}${off}) tipo=${tipo} hdrCol=${hdrCol} val="${val}" conf=${confidence.toFixed(2)}`)
+      // Só avisa se offset >= 4 e nunca repetiu o mesmo hdrCol+tipo
+      if (Math.abs(off) >= 4 && warnFn) {
+        const key = `${tipo}:${hdrCol}:${off}`
+        if (!_warnCache.has(key)) {
+          _warnCache.add(key)
+          warnFn(`findNear: offset alto (${off > 0 ? '+' : ''}${off}) tipo=${tipo} hdrCol=${hdrCol} — verificar layout do CSV`)
+        }
       }
       return { value: val, confidence, offset: off }
     }

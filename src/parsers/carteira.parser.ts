@@ -84,9 +84,11 @@ export function parseCarteira(rows: Row[]): ParseResult {
       const c5    = cell(row, 5)
       const c4    = cell(row, 4)
       const usaC5 = c5 && IS_COD.test(c5)
+      const nomeCliente = usaC5 ? cell(row, 9) : cell(row, 8)
+      if (!nomeCliente) continue  // ignorar linha Cliente: sem nome (subtotal/cabeçalho do ERP)
       current = {
         empresa: '', codigo: usaC5 ? c5 : c4,
-        nome:    usaC5 ? cell(row, 9)  : cell(row, 8),
+        nome:    nomeCliente,
         cpfcnpj: usaC5 ? cell(row, 22) : cell(row, 20),
         titulos: [], totalTitulos: '', saldoSemJuros: '', saldoComJuros: '', anotacao: '',
       } as unknown as Cliente
